@@ -2,8 +2,14 @@
 # server.py — Marathi Mitra MCP Server
 # ═══════════════════════════════════════════════════════════
 
-import random
+import os
 import sys
+import random
+from io import StringIO
+
+# ── Suppress gradio stdout before importing ───────────────
+os.environ["GRADIO_ANALYTICS_ENABLED"] = "False"
+
 from mcp.server.fastmcp import FastMCP
 from gradio_client import Client
 
@@ -18,12 +24,12 @@ mcp = FastMCP(
     Use quiz_me() to test the user's Marathi knowledge.
     Use get_vocabulary_list() to browse available words.
     Always be encouraging and kid-friendly.
+    Always wait for the tool response — it may take 2-5 minutes.
     """
 )
 
 SPACES_URL = "ninadp/marathi-mitra"
 
-# ── Vocabulary ────────────────────────────────────────────
 VOCABULARY = [
     "butterfly", "sun", "moon", "rain", "flower",
     "tree", "river", "sky", "water", "mountain",
@@ -42,66 +48,78 @@ VOCABULARY = [
 ]
 
 
-# ── Helper — call HF Spaces ───────────────────────────────
 def call_spaces(word: str) -> str:
-    """Call HF Spaces Gradio API and return lesson text."""
+    """Call HF Spaces — suppresses stdout to protect MCP protocol."""
+    # Redirect stdout to prevent gradio_client from
+    # corrupting the MCP stdio communication channel
+    old_stdout = sys.stdout
+    sys.stdout  = StringIO()
+
     try:
-        import sys
-        print(f"Connecting to {SPACES_URL}...", file=sys.stderr)
-        client = Client(SPACES_URL)
-        print(f"Connected! Calling predict for '{word}'...", file=sys.stderr)
-        result = client.predict(
-            word, 0, 0, [],
-            api_name="/predict",
+        client = Client(SPACES_URL, verbose=False)
+        job    = client.submit(
+            word,
+            api_name="/learn_word",
         )
-        print(f"Got result!", file=sys.stderr)
+        result = job.result(timeout=300)
         lesson = result[0]
-        if not lesson or lesson == "Please enter a word! 😊":
-            return f"Sorry, couldn't find Marathi word for '{word}'"
-        return lesson
+
     except Exception as e:
-        import sys
-        print(f"Error: {e}", file=sys.stderr)
-        return f"Error connecting to Marathi Mitra: {str(e)}"
+        lesson = None
+        print(f"call_spaces error: {e}", file=sys.stderr)
+
+    finally:
+        # Always restore stdout — critical for MCP
+        sys.stdout = old_stdout
+
+    if not lesson or lesson == "Please enter a word! 😊":
+        return f"Sorry, couldn't find Marathi word for '{word}'"
+
+    return lesson
 
 
-# ── Tool 1 — teach_word ───────────────────────────────────
 @mcp.tool()
 def teach_word(word: str) -> str:
     """
     Teach the Marathi word for any English word.
     Returns full lesson with Devanagari script,
     pronunciation, example sentence and fun fact.
+    Note: may take 2-5 minutes on CPU.
 
     Args:
         word: English word to teach in Marathi
     """
-    return call_spaces(word.strip().lower())
+    print(f"teach_word called: {word}", file=sys.stderr)
+    result = call_spaces(word.strip().lower())
+    print(f"teach_word done: {word}", file=sys.stderr)
+    return result
 
 
-# ── Tool 2 — word_of_the_day ──────────────────────────────
 @mcp.tool()
 def word_of_the_day() -> str:
     """
     Get a random Marathi word of the day with full lesson.
     Great for daily vocabulary practice.
+    Note: may take 2-5 minutes on CPU.
     """
     word   = random.choice(VOCABULARY)
+    print(f"word_of_the_day: {word}", file=sys.stderr)
     lesson = call_spaces(word)
     return f"🌟 TODAY'S MARATHI WORD 🌟\n\nWord: {word}\n\n{lesson}"
 
 
-# ── Tool 3 — quiz_me ──────────────────────────────────────
 @mcp.tool()
 def quiz_me(word: str) -> str:
     """
     Quiz the user on a Marathi word.
     Shows English word, hides Marathi translation.
+    Note: may take 2-5 minutes on CPU.
 
     Args:
         word: English word to quiz the user on
     """
     import re
+    print(f"quiz_me called: {word}", file=sys.stderr)
     lesson = call_spaces(word.strip().lower())
 
     marathi_match = re.search(r"is \*\*([^*]+)\*\*", lesson)
@@ -122,7 +140,6 @@ Say "show answer" when ready!
 [ANSWER: {marathi_word} / {pronunciation}]"""
 
 
-# ── Tool 4 — get_vocabulary_list ──────────────────────────
 @mcp.tool()
 def get_vocabulary_list(category: str = "all") -> str:
     """
@@ -164,11 +181,13 @@ def get_vocabulary_list(category: str = "all") -> str:
             f"{', '.join(words)}\n\n"
             f"Use teach_word() to learn any of these!"
         )
-    return f"Category '{category}' not found. Try: {', '.join(categories.keys())}"
+    return (
+        f"Category '{category}' not found. "
+        f"Try: {', '.join(categories.keys())}"
+    )
 
 
 # ── Run ───────────────────────────────────────────────────
 if __name__ == "__main__":
-    # Use stderr for any debug messages — stdout is for MCP
     print("Marathi Mitra MCP Server starting...", file=sys.stderr)
     mcp.run(transport="stdio")
