@@ -46,17 +46,23 @@ VOCABULARY = [
 def call_spaces(word: str) -> str:
     """Call HF Spaces Gradio API and return lesson text."""
     try:
+        import sys
+        print(f"Connecting to {SPACES_URL}...", file=sys.stderr)
         client = Client(SPACES_URL)
+        print(f"Connected! Calling predict for '{word}'...", file=sys.stderr)
         result = client.predict(
             word, 0, 0, [],
             api_name="/predict",
         )
+        print(f"Got result!", file=sys.stderr)
         lesson = result[0]
         if not lesson or lesson == "Please enter a word! 😊":
             return f"Sorry, couldn't find Marathi word for '{word}'"
         return lesson
     except Exception as e:
-        return f"Error connecting to Marathi Mitra: {e}"
+        import sys
+        print(f"Error: {e}", file=sys.stderr)
+        return f"Error connecting to Marathi Mitra: {str(e)}"
 
 
 # ── Tool 1 — teach_word ───────────────────────────────────
