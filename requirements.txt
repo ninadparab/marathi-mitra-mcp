@@ -1,0 +1,3 @@
+mcp
+gradio-client
+requests
