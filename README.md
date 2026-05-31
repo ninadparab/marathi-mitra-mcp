@@ -1,94 +1,65 @@
 # 🌸 Marathi Mitra — MCP Server
 
-MCP server that exposes Marathi vocabulary learning tools to Claude Desktop.
-Powered by a fine-tuned Phi-3 Mini model hosted on Hugging Face.
+MCP server that connects Claude Desktop to a fine-tuned Phi-3 Mini model
+for Marathi vocabulary learning.
+
+[![Python](https://img.shields.io/badge/Python-3.11+-blue)](https://python.org)
+[![MCP](https://img.shields.io/badge/MCP-SDK-orange)](https://github.com/modelcontextprotocol/python-sdk)
+[![Model](https://img.shields.io/badge/🤗-Model-yellow)](https://huggingface.co/ninadp/marathi-mitra-phi3-v2)
+
+---
 
 ## What It Does
 
-Connects your fine-tuned Marathi model to Claude Desktop so you can learn
-Marathi through natural conversation with Claude.
+Exposes Marathi vocabulary learning tools to Claude Desktop via the
+Model Context Protocol (MCP). Your fine-tuned model runs on HF Spaces
+and is called via the Gradio API.
 
 ```
-You:   "Teach me butterfly in Marathi"
+You:    "Teach me butterfly in Marathi"
 Claude: calls teach_word("butterfly")
-        "फुलपाखरू (Phul-pakh-roo)! 🦋
-         The butterfly sits on flowers...
-         Want to learn another word?"
+        → calls HF Spaces API
+        → fine-tuned Phi-3 Mini generates lesson
+        → Claude presents result naturally
+
+"🌸 Butterfly in Marathi is फुलपाखरू (Phul-pakh-roo)!
+ 📖 फुलपाखरू फुलांवर बसते.
+ Want to learn another word?"
 ```
+
+---
+
+## Architecture
+
+```
+Claude Desktop
+     ↕ stdin/stdout (local pipe)
+  server.py  ← this repo
+     ↕ HTTP (internet)
+  HF Spaces Gradio App
+     ↕
+  Fine-tuned Phi-3 Mini v2
+```
+
+Two connections:
+- **Local** — Claude Desktop ↔ server.py via stdio (no internet)
+- **Internet** — server.py ↔ HF Spaces via HTTP (gradio_client)
+
+---
 
 ## Tools Available
 
-| Tool | Description |
-|------|-------------|
-| `teach_word(word)` | Full Marathi lesson for any English word |
-| `word_of_the_day()` | Random daily vocabulary word |
-| `quiz_me(word)` | Quiz yourself on a word |
-| `get_vocabulary_list(category)` | Browse available words |
+| Tool | Description | Args |
+|------|-------------|------|
+| `teach_word` | Full Marathi lesson for any English word | `word: str` |
+| `word_of_the_day` | Random daily vocabulary word | none |
+| `quiz_me` | Quiz yourself on a word | `word: str` |
+| `get_vocabulary_list` | Browse words by category | `category: str` |
 
-## Setup
-
-### 1. Install dependencies
-
-```bash
-pip install mcp gradio-client requests
-```
-
-### 2. Find your Claude Desktop config file
+### Example Conversations
 
 ```
-Mac:     ~/Library/Application Support/Claude/claude_desktop_config.json
-Windows: %APPDATA%\Claude\claude_desktop_config.json
-```
-
-### 3. Add MCP server to config
-
-```json
-{
-  "mcpServers": {
-    "marathi-mitra": {
-      "command": "python",
-      "args": ["/FULL/PATH/TO/marathi-mitra-mcp/server.py"]
-    }
-  }
-}
-```
-
-Replace `/FULL/PATH/TO/` with your actual path.
-
-**Mac example:**
-```json
-{
-  "mcpServers": {
-    "marathi-mitra": {
-      "command": "python",
-      "args": ["/Users/yourname/marathi-mitra-mcp/server.py"]
-    }
-  }
-}
-```
-
-**Windows example:**
-```json
-{
-  "mcpServers": {
-    "marathi-mitra": {
-      "command": "python",
-      "args": ["C:\\Users\\yourname\\marathi-mitra-mcp\\server.py"]
-    }
-  }
-}
-```
-
-### 4. Restart Claude Desktop
-
-Quit completely and reopen.
-You should see a 🔨 hammer icon in Claude Desktop
-indicating tools are available.
-
-## Example Conversations
-
-```
-"Teach me the Marathi word for sun"
+"Teach me sun in Marathi"
 "What's today's Marathi word?"
 "Quiz me on butterfly"
 "Show me all animal words"
@@ -96,23 +67,100 @@ indicating tools are available.
 "Make flashcards for family words"
 ```
 
-## Architecture
+---
+
+## Tech Stack
+
+| Component | Tool |
+|-----------|------|
+| MCP Framework | Anthropic MCP SDK (FastMCP) |
+| HF Spaces Client | gradio-client |
+| Model | Fine-tuned Phi-3 Mini v2 (QLoRA) |
+| Transport | stdio (stdin/stdout) |
+| Protocol | JSON-RPC 2.0 (MCP) |
+
+---
+
+## Setup
+
+### 1. Clone repo
+
+```bash
+git clone https://github.com/ninadparab/marathi-mitra-mcp.git
+cd marathi-mitra-mcp
+```
+
+### 2. Install dependencies
+
+```bash
+# Python 3.11+ recommended
+pip install mcp gradio-client
+```
+
+### 3. Find Claude Desktop config location
 
 ```
-Claude Desktop
-    ↓ MCP protocol
-server.py (this repo)
-    ↓ Gradio client
-HF Spaces (ninadp/marathi-mitra)
-    ↓ model inference
-Fine-tuned Phi-3 Mini v2
+Windows: %APPDATA%\Local\Packages\Claude_*\LocalCache\Roaming\Claude\
+Mac:     ~/Library/Application Support/Claude/
 ```
 
-## Related
+**Easiest way:** Open Claude Desktop → Settings → Developer → Edit Config
 
-- [Marathi Mitra App](https://huggingface.co/spaces/ninadp/marathi-mitra)
-- [Model on HF Hub](https://huggingface.co/ninadp/marathi-mitra-phi3-v2)
-- [Training Code](https://github.com/ninadparab/marathi-mitra)
+### 4. Add to config
+
+```json
+{
+  "mcpServers": {
+    "marathi-mitra": {
+      "command": "C:\\Users\\YOUR_USERNAME\\marathi-mitra-mcp\\start_server.bat",
+      "args": []
+    }
+  }
+}
+```
+
+### 5. Create start_server.bat (Windows)
+
+```bat
+@echo off
+"C:\path\to\python.exe" "C:\path\to\marathi-mitra-mcp\server.py"
+```
+
+Find your Python path:
+```bash
+py -3.11 -c "import sys; print(sys.executable)"
+```
+
+### 6. Restart Claude Desktop completely
+
+```
+Task Manager → End Task on Claude.exe
+Then reopen Claude Desktop
+Settings → Developer → marathi-mitra should show "connected"
+```
+
+---
+
+## Note on Response Time
+
+The model runs on CPU on HF Spaces free tier.
+Each response takes **2-5 minutes**.
+
+For faster responses:
+- Upgrade HF Spaces to T4 GPU ($0.60/hr) → ~10 seconds
+- Pause GPU when not using
+
+---
+
+## Related Repos
+
+| Repo | Description |
+|------|-------------|
+| [marathi-mitra](https://github.com/ninadparab/marathi-mitra) | Training code, notebooks, dataset |
+| [marathi-mitra-phi3-v2](https://huggingface.co/ninadp/marathi-mitra-phi3-v2) | Fine-tuned model on HF Hub |
+| [marathi-mitra (Spaces)](https://huggingface.co/spaces/ninadp/marathi-mitra) | Live Gradio app |
+
+---
 
 ## License
 
